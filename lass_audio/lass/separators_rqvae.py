@@ -78,5 +78,6 @@ class BeamSearchSeparator(Separator):
 
             #3.d Save the separated sources
             #TODO: check sample rate
-            torchaudio.save(str(output_dir / f"sep{batch_idx}.wav"), separated_source_1.cpu(), sample_rate=22000)
-            torchaudio.save(str(output_dir / f"sep{batch_idx}.wav"), separated_source_2.cpu(), sample_rate=22000)
+            torchaudio.save(str(output_dir / f"mix{batch_idx}.wav"), batch['mixture'].cpu(), sample_rate=22000)
+            torchaudio.save(str(output_dir / f"sep{batch_idx}_1.wav"), separated_source_1.cpu(), sample_rate=22000)
+            torchaudio.save(str(output_dir / f"sep{batch_idx}_2.wav"), separated_source_2.cpu(), sample_rate=22000)

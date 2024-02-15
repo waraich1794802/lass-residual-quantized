@@ -1,11 +1,18 @@
 # Utility
 import math
+import functools
+import sparse
+from typing import Any, Optional, Tuple
 # EnCodec and Encodec prior
 from encodec.encodec.model import EncodecModel, LMModel
 # Prior for RQ-Transformer
 from jukebox.prior.autoregressive import ConditionalAutoregressive2D
-# Pytorch
+# Pytorch and numpy
 import torch
+import numpy as np
+# Diba interfaces
+from diba.diba import Likelihood
+from diba.interfaces import SeparationPrior
 
 class EncodecPriorModel(torch.nn.Module):
     def __init__(self, rqvae: EncodecModel):
@@ -48,45 +55,46 @@ class EncodecPrior(SeparationPrior):
 
     #TODO: change to correct out_features
     def get_tokens_count(self) -> int:
-        return self._prior.linears.out_features
+        print("i'm outputting: {0}".format(self._prior.linears[0].out_features * 8))
+        return self._prior.linears[0].out_features * 8
 
     def get_sos(self) -> Any:
-        return 0 #self._prior.start_token # DUMMY METHOD
+        return 0 #return start token as defined in LMModel
 
     def get_logits(
             self, token_ids: torch.LongTensor, cache: Optional[Any] = None,
     ) -> Tuple[torch.Tensor, Optional[Any]]:
 
-        # get dimensions
-        n_samples, seq_length = token_ids.shape
-        sample_t = seq_length - 1
-        #print(f"token is: {token_ids}");
-        #print(f"n_sample is: {n_samples}");
-        #print(f"seq_length is: {seq_length}");
-
         # assert token lenght is > 0
         assert len(token_ids) > 0
+        
+        # if sos token then we create proper start token
+        if len(token_ids[0]) == 1:
+            token_ids = torch.zeros(1, 8, 1).long().to(self.get_device())
+        # else add 1 to differentiate index 0 from start token
+        else:
+            token_ids = token_ids.view() + 1
+            
+        # get dimensions
+        print("token_ids shape is: {0}".format(token_ids.shape))
+        n_samples, n_q, seq_length = token_ids.shape
+        sample_t = seq_length - 1
+        #print(f"token is: {token_ids}");
 
-        x = token_ids[:, -1:]
-        #print(f"x shape is: {x.shape}");
+        x = token_ids[:,:, -1:]
+        print(f"x shape is: {x.shape}");
 
-        # get embeddings
-        #x, cond_0 = self._prior.get_emb(sample_t, n_samples, x, x_cond=x_cond, y_cond=None)
-        #print(f"embedding shape is: {x.shape}");
-        #print(f"cond_0 shape is: {cond_0.shape}");
-
-        #self._prior.transformer.check_cache(n_samples, sample_t, fp16=True)
-        #x = self._prior.transformer(x, sample=True, fp16=True) # TODO: try sample = False
-        #print(f"transformer shape is: {x.shape}");
-        #x = self._prior.x_out(x)[:,-1,:]
-
+        # TODO: change order to match the likelihood matrix
         #apply transformer
-        x, _, _ = _prior(x)
+        x, _, _ = self._prior(x)
+        x = x[:,:,:,-1].view(n_samples, -1)
         #print(f"output shape is: {x.shape}");
+
         return x.to(torch.float32), None
 
     def reorder_cache(self, cache: Any, beam_idx: torch.LongTensor) -> Any:
-        self._prior.transformer.substitute_cache(beam_idx)
+        #TODO: understand what this is for
+        #self._prior.transformer.substitute_cache(beam_idx)
         return None
 
 
@@ -112,7 +120,7 @@ class SparseLikelihood(Likelihood):
 
     def _normalize_matrix(self, sum_dist_path: str):
         sum_dist = sparse.load_npz(str(sum_dist_path))
-        print("sum_dist.shape is: {0}".format(sum_dist.shape))
+        print("Likelihood matrix's shape is: {0}".format(sum_dist.shape))
         #sum_dist = sum_dist[:1024,:1024,:1024]
         #TODO: CHANGE ABOVE TO BE CORRECT
         integrals = sum_dist.sum(axis=-1, keepdims=True)

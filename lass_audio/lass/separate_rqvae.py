@@ -5,14 +5,12 @@ from typing import Union
 from lass.utils import ROOT_DIRECTORY
 # EnCodec
 from encodec.encodec.model import EncodecModel
-# Prior
-from lass.train_priors_rqvae import make_prior
 # Pytorch and dataset
 import torch
 from torch.utils.data import DataLoader
 from lass.datasets_rqvae import MixtureDataset
 # Diba interface
-from lass.diba_interfaces import JukeboxPrior, SparseLikelihood
+from lass.prior_rqvae import EncodecPrior, SparseLikelihood
 # Beam Search Separator
 from lass.separators_rqvae import BeamSearchSeparator
 
@@ -52,8 +50,8 @@ def separate(
 
     #3 Instantiate prior models
     priors = [
-        make_prior(rqvae),
-        make_prior(rqvae),
+        rqvae.get_lm_model(),
+        rqvae.get_lm_model(),
     ]
 
     priors[0].load_state_dict(torch.load(prior_path_1))
@@ -68,7 +66,7 @@ def separate(
     separator = BeamSearchSeparator(
         encode_fn = lambda x: torch.cat([frame for frame, _ in rqvae.encode(x)], dim=-1).view(-1).tolist(),
         decode_fn = lambda x: rqvae.decode([x.view(8, 1024)]),
-        priors={k:JukeboxPrior(p, torch.zeros((), dtype=torch.float32, device=device)) for k,p in priors.items()},
+        priors={k:EncodecPrior(p) for k,p in priors.items()},
         likelihood = SparseLikelihood(sum_frequencies_path, device, 3.0),
         num_beams = 10,
     )
@@ -108,7 +106,7 @@ if __name__ == "__main__":
         "--output-dir",
         type=str,
         help="Directory where the separated audio will be stored",
-        default=str(ROOT_DIRECTORY / "separated-audio"),
+        default=str(ROOT_DIRECTORY / "separated-audio-rqvae"),
     )
     parser.add_argument(
         "--prior-path-1",
