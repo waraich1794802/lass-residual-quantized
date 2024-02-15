@@ -61,7 +61,8 @@ def train_prior(
     prior.to(device)
     print("Prior model instantiated")
     
-    # Used in a previous version:
+    # Used in a previous version
+    # RT-Transformer that didn't work out
     #prior = EncodecPriorModel(rqvae)
     #print(f"Codebook size: {prior.bins}");
     #print(f"Number of quantizers: {prior.n_q}");

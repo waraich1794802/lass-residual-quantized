@@ -14,7 +14,6 @@ from lass.prior_rqvae import EncodecPrior, SparseLikelihood
 # Beam Search Separator
 from lass.separators_rqvae import BeamSearchSeparator
 
-
 def separate(
     source_dir_1: Union[Path, str],
     source_dir_2: Union[Path, str],
@@ -65,7 +64,7 @@ def separate(
     #4 Instantiate separator
     separator = BeamSearchSeparator(
         encode_fn = lambda x: torch.cat([frame for frame, _ in rqvae.encode(x)], dim=-1).view(-1).tolist(),
-        decode_fn = lambda x: rqvae.decode([x.view(8, 1024)]),
+        decode_fn = lambda x: rqvae.decode([(x, None)]),
         priors={k:EncodecPrior(p) for k,p in priors.items()},
         likelihood = SparseLikelihood(sum_frequencies_path, device, 3.0),
         num_beams = 10,
@@ -76,7 +75,7 @@ def separate(
     dataset_loader = DataLoader(
         mixture_dataset,
         batch_size=1,
-        num_workers=6,
+        #num_workers=6,
     )
 
     #6 Separate (and save)

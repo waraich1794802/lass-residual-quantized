@@ -207,7 +207,7 @@ def _ancestral_sample(
     temperature: float,
 ):
     prior_0, prior_1 = priors
-    sample_tokens = len(mixture)
+    sample_tokens = len(mixture) // 8
 
     # check that everything is on the same device
     assert len(set([p._get_device() for p in priors] + [likelihood.get_device()])) == 1
@@ -216,18 +216,19 @@ def _ancestral_sample(
     # initialize loop variables
     log_post_sum = torch.zeros(1, 1, dtype=torch.long, device=device)
     #xs_0, xs_1 = torch.full((2, n_samples, sample_tokens + 1), fill_value=-1, dtype=torch.long, device=device)
-    xs_0, xs_1 = torch.full((2, n_samples, 8, sample_tokens / 8 + 1), fill_value=-1, dtype=torch.long, device=device)
+    xs_0, xs_1 = torch.full((2, n_samples, 8, sample_tokens + 1), fill_value=-1, dtype=torch.long, device=device)
     print("xs_0 is: {0}".format(xs_0.shape))
-    xs_0[:, 0], xs_1[:, 0] = [p.get_sos() for p in priors]
+    xs_0[:, :, 0], xs_1[:, :, 0] = [p.get_sos() for p in priors]
     past_0, past_1 = (None, None)
     num_current_beams = 1
 
     # loop over all samples tokens
     for sample_t in tqdm(range(sample_tokens)):
 
+        #TODO: maybe use past?
         # compute log priors
-        log_p_0, past_0 = prior_0._get_logits(xs_0[:num_current_beams, : sample_t + 1], past_0)
-        log_p_1, past_1 = prior_1._get_logits(xs_1[:num_current_beams, : sample_t + 1], past_1)
+        log_p_0, past_0 = prior_0._get_logits(xs_0[:num_current_beams, :, : sample_t + 1], past_0)
+        log_p_1, past_1 = prior_1._get_logits(xs_1[:num_current_beams, :, : sample_t + 1], past_1)
 
         # NOTE: during first token separation batch-size should be 1
         assert len(log_p_0) == len(log_p_1)
@@ -235,15 +236,40 @@ def _ancestral_sample(
         assert log_p_0.shape[-1] == log_p_1.shape[-1] == likelihood.get_tokens_count()
 
         # normalize priors and apply temperature
+        #not sure this is correct
         log_p_0 = normalize_logits(log_p_0, temperature)
         log_p_1 = normalize_logits(log_p_1, temperature)
 
         # log likelihood in sparse COO format
         assert isinstance(mixture[sample_t], int)
-        ll_coords, ll_data = likelihood._get_log_likelihood(mixture[sample_t])
+        #print("len(mixture) is: {0}".format(len(mixture)))
+        #print("mixture[sample_t] is: {0}".format(mixture[sample_t]))
+        #print("mixture slice is: {0}".format(mixture[sample_t * 8: sample_t * 8 + 8]))
+        #ll_coords, ll_data = likelihood._get_log_likelihood(mixture[sample_t])
+        #AW:
+        #TODO: check that tokens are different
+        likelihood_list =[likelihood._get_log_likelihood(mixture[token_idx]) for token_idx in range(sample_t * 8, sample_t * 8 + 8)]
+        #print("ll_coords be like: {0}".format(len(likelihood_list)))
+        #print("ll_coords be like: {0}".format(likelihood_list[0][0].shape))
 
         # compute log posterior
-        if ll_coords.numel() > 0:
+        list_log_post_sum, list_x_0, list_x_1 = [], [], []
+        for ll_coords, ll_data in likelihood_list:
+            if ll_coords.numel() > 0:
+                # Note: posterior_data has shape (n_samples, nonzeros)
+                posterior_data = _compute_log_posterior(ll_data, ll_coords, log_p_0, log_p_1)
+                log_post_sum, (beams, coords_idx) = get_topk(log_post_sum + posterior_data, n_samples)
+                log_post_sum = log_post_sum.unsqueeze(-1)
+                x_0, x_1 = ll_coords[:, coords_idx]
+            else:
+                raise RuntimeError(f"Code {mixture[sample_t]} is not available in likelihood!");
+            list_log_post_sum.append(log_post_sum)
+            list_x_0.append(x_0)
+            list_x_1.append(x_1)
+        #/AW
+
+        # compute log posterior
+        '''if ll_coords.numel() > 0:
             # Note: posterior_data has shape (n_samples, nonzeros)
             posterior_data = _compute_log_posterior(ll_data, ll_coords, log_p_0, log_p_1)
             log_post_sum, (beams, coords_idx) = get_topk(log_post_sum + posterior_data, n_samples)
@@ -251,24 +277,44 @@ def _ancestral_sample(
             x_0, x_1 = ll_coords[:, coords_idx]
         else:
             raise RuntimeError(f"Code {mixture[sample_t]} is not available in likelihood!")
-
+        '''
+        
+        #TODO manage beams per thing
         num_current_beams = len(beams)
 
+        #print("after log posterior: {0}".format(list_x_0))
+        #print("after log posterior 0: {0}".format(list_x_0[0].shape))
+        #print("after log posterior 1: {0}".format(list_x_1[0].shape))
+        #print("after log posterior xs_0: {0}".format(xs_0.shape))
+        #print("after log posterior xs_2: {0}".format(xs_1.shape))
+
+        x_0 = torch.cat(list_x_0).view(8,-1).permute(1,0)
+        x_1 = torch.cat(list_x_1).view(8,-1).permute(1,0)
+
+        #print("x_0 is: {0}".format(x_0))
+
         # make history consistent with current beams
-        xs_0[:num_current_beams, : sample_t + 1] = xs_0[beams, : sample_t + 1]
-        xs_1[:num_current_beams, : sample_t + 1] = xs_1[beams, : sample_t + 1]
+        # TODO: this doesn't look right
+        #xs_0[:num_current_beams, : sample_t + 1] = xs_0[beams, : sample_t + 1]
+        xs_0[:num_current_beams, :, : sample_t + 1] = xs_0[beams, :, : sample_t + 1]
+        #xs_1[:num_current_beams, : sample_t + 1] = xs_1[beams, : sample_t + 1]
+        xs_1[:num_current_beams, :, : sample_t + 1] = xs_1[beams, :, : sample_t + 1]
 
         # Note: x_0, x_1 have shape (n_sample,)
-        xs_0[:, sample_t + 1] = x_0
-        xs_1[:, sample_t + 1] = x_1
+        #xs_0[:, sample_t + 1] = x_0
+        xs_0[:, :, sample_t + 1] = x_0
+        #xs_1[:, sample_t + 1] = x_1
+        xs_1[:, :, sample_t + 1] = x_1
 
+        #TODO: manage beams per thing
         log_post_sum = log_post_sum[beams]
 
         # update the priors cache w.r.t. the current beams
         past_0 = prior_0._reorder_cache(past_0, beams)
         past_1 = prior_1._reorder_cache(past_1, beams)
 
-    result_0, result_1 = xs_0[:num_current_beams, 1:], xs_1[:num_current_beams, 1:]
+    #result_0, result_1 = xs_0[:num_current_beams, 1:], xs_1[:num_current_beams, 1:]
+    result_0, result_1 = xs_0[:num_current_beams, :, 1:], xs_1[:num_current_beams, :, 1:]
 
     # check returned separation is correctly masked
     assert (result_0 == -1).sum() == 0

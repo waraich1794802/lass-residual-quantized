@@ -2,7 +2,7 @@
 import math
 import functools
 import sparse
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, Sequence
 # EnCodec and Encodec prior
 from encodec.encodec.model import EncodecModel, LMModel
 # Prior for RQ-Transformer
@@ -36,12 +36,14 @@ class EncodecPriorModel(torch.nn.Module):
 
     def forward(self, x):
         x = x.view(self.n_q, self.bins)
-        x = torch.sum(x, 0).unsqueeze(0)
+        x_sp = torch.sum(x, 0).unsqueeze(0)
+        x_dp = x.permute(0, 1)
             
-        # Compute the loss for the spatial prior
-        loss, _, _ = self.spatial_prior(x)
+        # Compute the tokens for the spatial prior
+        loss, x_sp = self.spatial_prior(x_sp)
 
-        # Compute the loss
+        # Compute the tokens for the depth prior
+        loss, x_dp = self.depth_prior(x_dp)
 
         return loss
 
@@ -53,19 +55,17 @@ class EncodecPrior(SeparationPrior):
     def get_device(self) -> torch.device:
         return list(self._prior.transformer.parameters())[0].device
 
-    #TODO: change to correct out_features
     def get_tokens_count(self) -> int:
-        print("i'm outputting: {0}".format(self._prior.linears[0].out_features * 8))
         return self._prior.linears[0].out_features * 8
 
     def get_sos(self) -> Any:
-        return torch.zeros(8, 1).to(self.get_device()) #return start token as defined in LMModel
+        return 0 #torch.zeros(10, 8).to(self.get_device()) #return start token as defined in LMModel
 
     def get_logits(
             self, token_ids: torch.LongTensor, cache: Optional[Any] = None,
     ) -> Tuple[torch.Tensor, Optional[Any]]:
 
-        print("token_ids shape is: {0}".format(token_ids.shape))
+        #print("token_ids shape is: {0}".format(token_ids.shape))
         
         # assert token lenght is > 0
         assert len(token_ids) > 0
@@ -75,21 +75,22 @@ class EncodecPrior(SeparationPrior):
             token_ids = torch.zeros(1, 8, 1).long().to(self.get_device())
         # else add 1 to differentiate index 0 from start token
         else:
-            token_ids = token_ids[:,-1:] + 1
+            token_ids = token_ids + 1
             
         # get dimensions
-        print("token_ids shape is: {0}".format(token_ids.shape))
+        #print("token_ids shape is: {0}".format(token_ids.shape))
         n_samples, n_q, seq_length = token_ids.shape
         sample_t = seq_length - 1
         #print(f"token is: {token_ids}");
 
         x = token_ids[:,:, -1:]
-        print(f"x shape is: {x.shape}");
+        #print(f"x shape is: {x.shape}");
 
         # TODO: change order to match the likelihood matrix
         #apply transformer
         x, _, _ = self._prior(x)
-        x = x[:,:,:,-1].permute(0,1,3,2)
+        #print(f"x shape after prior is: {x.shape}");
+        x = x[:,:,:,-1]
         x = x.view(n_samples, -1)
         #print(f"output shape is: {x.shape}");
 
@@ -116,6 +117,7 @@ class SparseLikelihood(Likelihood):
 
     @functools.lru_cache(512)
     def get_log_likelihood(self, token_idx: int) -> Tuple[torch.LongTensor, torch.Tensor]:
+        #print("_freqs shape is: {0}".format(self._freqs.shape))
         sparse_nll = self._freqs[:, :, token_idx].tocoo()
         nll_coords = torch.tensor(sparse_nll.coords, device=self.get_device(), dtype=torch.long)
         nll_data = torch.tensor(sparse_nll.data, device=self.get_device(), dtype=torch.float)
@@ -124,8 +126,6 @@ class SparseLikelihood(Likelihood):
     def _normalize_matrix(self, sum_dist_path: str):
         sum_dist = sparse.load_npz(str(sum_dist_path))
         print("Likelihood matrix's shape is: {0}".format(sum_dist.shape))
-        #sum_dist = sum_dist[:1024,:1024,:1024]
-        #TODO: CHANGE ABOVE TO BE CORRECT
         integrals = sum_dist.sum(axis=-1, keepdims=True)
         I, J, _ = integrals.coords
         integrals = sparse.COO(

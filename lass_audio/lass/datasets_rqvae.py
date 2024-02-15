@@ -3,6 +3,7 @@ import librosa
 from pathlib import Path
 # Pytorch
 import torchaudio
+from torchaudio.transforms import Resample
 from torch.utils.data import Dataset
 # Jukebox dataset
 from jukebox.data.files_dataset import FilesAudioDataset
@@ -73,6 +74,7 @@ class MixtureDataset(Dataset):
     def __init__(self, directory_1: str, directory_2: str, device: str):
         super().__init__()
 
+        self.target_sample_rate = 22000
         self.device = device
         self.directory_1 = Path(directory_1)
         self.directory_2 = Path(directory_2)
@@ -96,15 +98,22 @@ class MixtureDataset(Dataset):
         path_1 = self.directory_1 / self.files_1[idx]
         path_2 = self.directory_2 / self.files_2[idx]
 
-        source_1, _ = torchaudio.load(str(path_1))
+        source_1, sample_rate = torchaudio.load(str(path_1))
+        resample_transform_1 = Resample(orig_freq=sample_rate, new_freq=self.target_sample_rate)
+        source_1 = resample_transform_1(source_1)[:,327679:327679*2]
         #print("source_1.shape is: {0}".format(source_1.shape))
-        source_1 = source_1[:,:327679]
+        #path = Path("D:\Deep Learning Project\lass-residual-quantized\lass_audio\separated-audio-rqvae")
+        #torchaudio.save(str(path / f"resampled_source_1_{idx}.wav"), source_1.cpu(), sample_rate=self.target_sample_rate)
+        
 
-        source_2, _ = torchaudio.load(str(path_2))
-        source_2 = source_2[:,:327679]
+        source_2, sample_rate = torchaudio.load(str(path_2))
+        resample_transform_2 = Resample(orig_freq=sample_rate, new_freq=self.target_sample_rate)
+        source_2 = resample_transform_2(source_2)[:,327679:327679*2]
 
         # Compute mixture from sources
         mixture = 0.5 * source_1 + 0.5 * source_2
+        mixture = mixture.to(self.device)
+        #print("mixture is: {0}".format(torch.sum(mixture)))
         #print("mixture.shape is: {0}".format(mixture.shape))
 
-        return { 'mixture': mixture.to(self.device) }
+        return mixture # { 'mixture': mixture }
