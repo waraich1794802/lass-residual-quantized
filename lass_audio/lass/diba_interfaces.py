@@ -59,8 +59,10 @@ class JukeboxPrior(SeparationPrior):
         self._prior.transformer.check_cache(n_samples, sample_t, fp16=True)
         x = self._prior.transformer(x, sample=True, fp16=True) # TODO: try sample = False
         print(f"transformer shape is: {x.shape}");
-        x = self._prior.x_out(x)[:,-1,:]
+        x = self._prior.x_out(x)
         print(f"output shape is: {x.shape}");
+        x = x[:,-1,:]
+        print(f"output shape after is: {x.shape}");
         self.iters += 1
         if self.iters >= 3:
             exit()

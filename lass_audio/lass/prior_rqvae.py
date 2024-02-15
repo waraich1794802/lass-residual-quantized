@@ -92,15 +92,14 @@ class EncodecPrior(SeparationPrior):
         x, state, offset = self._prior(x, state, offset)
         #print(f"x shape after prior is: {x.shape}");
         x = x[:,:,:,-1]
+        #TODO: this might be an issue
         x = x.view(n_samples, -1)
         #print(f"output shape is: {x.shape}");
 
         return x.to(torch.float32), (state, offset)
 
     def reorder_cache(self, cache: Any, beam_idx: torch.LongTensor) -> Any:
-        #TODO: understand what this is for
-        #self._prior.transformer.substitute_cache(beam_idx)
-        return None
+        return cache
 
 
 class SparseLikelihood(Likelihood):
