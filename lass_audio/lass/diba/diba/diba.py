@@ -11,6 +11,7 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 from diba.interfaces import Likelihood, SeparationPrior
 from diba.utils import get_topk, normalize_logits
 
+
 # def _print_beams(xs_0, xs_1, scores, posterior_data, ll_coords):
 #
 #     def _print_next_tokens(bi, xs, pi):
@@ -215,7 +216,7 @@ def _ancestral_sample(
     # initialize loop variables
     log_post_sum = torch.zeros(1, 1, dtype=torch.long, device=device)
     #xs_0, xs_1 = torch.full((2, n_samples, sample_tokens + 1), fill_value=-1, dtype=torch.long, device=device)
-    xs_0, xs_1 = torch.full((2, n_samples, 8, sample_tokens + 1), fill_value=-1, dtype=torch.long, device=device)
+    xs_0, xs_1 = torch.full((2, n_samples, 8, sample_tokens / 8 + 1), fill_value=-1, dtype=torch.long, device=device)
     print("xs_0 is: {0}".format(xs_0.shape))
     xs_0[:, 0], xs_1[:, 0] = [p.get_sos() for p in priors]
     past_0, past_1 = (None, None)

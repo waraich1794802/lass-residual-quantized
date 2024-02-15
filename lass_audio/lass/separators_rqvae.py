@@ -8,8 +8,8 @@ import torch
 import torchaudio
 from torch.utils.data import DataLoader
 # Discrete Bayesian Signal Separation
-import diba
-from diba.diba import Likelihood, SeparationPrior
+from .diba import diba
+from .diba.diba.diba import Likelihood, SeparationPrior
 # Progress bar
 from tqdm import tqdm
 

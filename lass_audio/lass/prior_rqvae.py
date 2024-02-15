@@ -11,8 +11,8 @@ from jukebox.prior.autoregressive import ConditionalAutoregressive2D
 import torch
 import numpy as np
 # Diba interfaces
-from diba.diba import Likelihood
-from diba.interfaces import SeparationPrior
+from .diba.diba.diba import Likelihood
+from .diba.diba.interfaces import SeparationPrior
 
 class EncodecPriorModel(torch.nn.Module):
     def __init__(self, rqvae: EncodecModel):
@@ -59,12 +59,14 @@ class EncodecPrior(SeparationPrior):
         return self._prior.linears[0].out_features * 8
 
     def get_sos(self) -> Any:
-        return 0 #return start token as defined in LMModel
+        return torch.zeros(8, 1).to(self.get_device()) #return start token as defined in LMModel
 
     def get_logits(
             self, token_ids: torch.LongTensor, cache: Optional[Any] = None,
     ) -> Tuple[torch.Tensor, Optional[Any]]:
 
+        print("token_ids shape is: {0}".format(token_ids.shape))
+        
         # assert token lenght is > 0
         assert len(token_ids) > 0
         
@@ -73,7 +75,7 @@ class EncodecPrior(SeparationPrior):
             token_ids = torch.zeros(1, 8, 1).long().to(self.get_device())
         # else add 1 to differentiate index 0 from start token
         else:
-            token_ids = token_ids.view() + 1
+            token_ids = token_ids[:,-1:] + 1
             
         # get dimensions
         print("token_ids shape is: {0}".format(token_ids.shape))
@@ -87,7 +89,8 @@ class EncodecPrior(SeparationPrior):
         # TODO: change order to match the likelihood matrix
         #apply transformer
         x, _, _ = self._prior(x)
-        x = x[:,:,:,-1].view(n_samples, -1)
+        x = x[:,:,:,-1].permute(0,1,3,2)
+        x = x.view(n_samples, -1)
         #print(f"output shape is: {x.shape}");
 
         return x.to(torch.float32), None
