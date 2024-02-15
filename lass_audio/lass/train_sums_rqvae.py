@@ -2,6 +2,7 @@
 import argparse
 import re
 import sparse
+import math
 from pathlib import Path
 from typing import Union, Tuple
 from lass.utils import ROOT_DIRECTORY
@@ -51,7 +52,7 @@ def estimate_distribution(
         # K is the number of codebooks
         # T is the codebook size
         codes = codes.cpu().numpy()
-        concatenated_codes = np.reshape(codes, newshape=-1).tolist()
+        concatenated_codes = np.reshape(codes, newshape=-1, order="F").tolist()
         return concatenated_codes
 
     #0.b to load the distribution of sums
@@ -72,19 +73,24 @@ def estimate_distribution(
         return sum_dist, iterations
     
     #1 Set device for training
-    device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")
-    torch.cuda.set_device(0)
+    if torch.cuda.is_available():
+        device = torch.device("cuda", 0)
+        torch.cuda.set_device(0)
+    else:
+        device = torch.device("cpu")
     print(f"Device is: {device}");
     
     #2 Instantiate rqvae model from EnCodec
     rqvae = EncodecModel.encodec_model_24khz()
+    rqvae.set_target_bandwidth(6.0)
     rqvae = rqvae.to(device)
     print("EnCodec model instantiated")
     
     #2.a Compute number of latent bins * depth
-    bins_x_depth = rqvae.quantizer.bins * rqvae.quantizer.n_q
+    depth = int(1000 * rqvae.bandwidth // (math.ceil(rqvae.sample_rate / rqvae.encoder.hop_length) * 10))
+    bins_x_depth = rqvae.quantizer.bins * depth
     print(f"Codebook size: {rqvae.quantizer.bins}");
-    print(f"Number of quantizers: {rqvae.quantizer.n_q}");
+    print(f"Number of quantizers: {depth}");
 
     #3 Instantiate data-loader
     train_dataset = TrainDataset(train_dir)
@@ -122,7 +128,7 @@ def estimate_distribution(
                 x = (mix*batch[:,:,0] + (1-mix)*batch[:,:,1])
                 x = x[:,None,:]
 
-                #6.b split batch and sum the two halves to make the mixture
+                #6.b split batch and sum the two halves to make mixtures
                 x_1 = x[: batch_size // 2].to(device)
                 x_2 = x[batch_size // 2 :].to(device)
                 x_sum = alpha[0] * x_1 + alpha[1] * x_2

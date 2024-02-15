@@ -228,6 +228,18 @@ def main(
         fp16=True,
         device=device,
     )
+
+    print(f"prime_loss_fraction: {priors[0].prime_loss_fraction}");
+    print(f"z_shapes: {priors[0].z_shapes}");
+    print(f"levels: {priors[0].levels}");
+    print(f"x_cond: {priors[0].prior.x_cond}");
+    print(f"prior.input_shape: {priors[0].prior.input_shape}");
+    print(f"prior.input_dims: {priors[0].prior.input_dims}");
+    print(f"prior.encoder_dims: {priors[0].prior.encoder_dims}");
+    print(f"prior.bins: {priors[0].prior.bins}");
+    print(f"prior.width: {priors[0].prior.width}");
+    print(f"prior.depth: {priors[0].prior.depth}");
+    #exit()
     priors = {
         Path(prior_1_path).stem: priors[0],
         Path(prior_2_path).stem: priors[1],

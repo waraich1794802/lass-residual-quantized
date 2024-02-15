@@ -1,5 +1,5 @@
 # Utility
-from typing import Callable
+from typing import Callable, Mapping
 from pathlib import Path
 # Enable Abstraction
 import abc
@@ -26,14 +26,16 @@ class BeamSearchSeparator(Separator):
         self,
         encode_fn: Callable,
         decode_fn: Callable,
+        priors: Mapping[str, SeparationPrior],
         likelihood: Likelihood,
         num_beams: int,
     ):
         super().__init__()
-        # TODO: change to correct function
-        self.encode_fn = encode_fn #lambda x: vqvae.encode(x.unsqueeze(-1), vqvae_level, vqvae_level + 1).view(-1).tolist()
-        self.decode_fn = decode_fn #lambda x: decode_latent_codes(vqvae, x.squeeze(0), level=vqvae_level)
+        self.encode_fn = encode_fn #TODO, put the function here once is finalized
+        self.decode_fn = decode_fn #lambda x: rqvae.decode(x)
 
+        self.source_types = list(priors)
+        self.priors = list(priors.values())
         self.likelihood = likelihood
         self.num_beams = num_beams
 
@@ -55,20 +57,26 @@ class BeamSearchSeparator(Separator):
         #3 Loop over mixtures
         for batch_idx, batch in enumerate(tqdm(dataset_loader)):
             #3.a Convert signals to codes
+            #print("mixture.shape is: {0}".format(batch['mixture'].shape))
             mixture_codes = self.encode_fn(batch['mixture'])
+            #print("len(mixture_codes) is: {0}".format(len(mixture_codes)))
+            #print("mixture.type is: {0}".format(mixture_codes.type()))
 
-            #3.b Separate mixture (what is the shape of x?)
-            #TODO: where to get encodec priors?
-            diba_separated = diba.fast_beamsearch_separation(
-                priors = {'first' : SeparationPrior()},
+            #3.b Separate mixture
+            #TODO: what is the shape of diba_separated?
+            #TODO: doesn't make sense that mixture_codes are int?
+            diba_separated_1, diba_separated_2 = diba.fast_beamsearch_separation(
+                priors = self.priors,
                 likelihood = self.likelihood,
                 mixture = mixture_codes,
                 num_beams = self.num_beams,
             )
 
             #3.c Decode the results
-            separated_sources = self.decode_fn(diba_separated)
+            separated_source_1 = self.decode_fn(diba_separated_1)
+            separated_source_2 = self.decode_fn(diba_separated_2)
 
             #3.d Save the separated sources
             #TODO: check sample rate
-            torchaudio.save(str(output_dir / f"sep{batch_idx}.wav"), separated_sources.cpu(), sample_rate=22000)
+            torchaudio.save(str(output_dir / f"sep{batch_idx}.wav"), separated_source_1.cpu(), sample_rate=22000)
+            torchaudio.save(str(output_dir / f"sep{batch_idx}.wav"), separated_source_2.cpu(), sample_rate=22000)

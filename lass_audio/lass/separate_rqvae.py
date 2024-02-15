@@ -5,12 +5,14 @@ from typing import Union
 from lass.utils import ROOT_DIRECTORY
 # EnCodec
 from encodec.encodec.model import EncodecModel
+# Prior
+from lass.train_priors_rqvae import make_prior
 # Pytorch and dataset
 import torch
 from torch.utils.data import DataLoader
 from lass.datasets_rqvae import MixtureDataset
 # Diba interface
-from lass.diba_interfaces import SparseLikelihood
+from lass.diba_interfaces import JukeboxPrior, SparseLikelihood
 # Beam Search Separator
 from lass.separators_rqvae import BeamSearchSeparator
 
@@ -19,6 +21,8 @@ def separate(
     source_dir_1: Union[Path, str],
     source_dir_2: Union[Path, str],
     output_dir: Union[Path, str],
+    prior_path_1: Union[Path, str],
+    prior_path_2: Union[Path, str],
     sum_frequencies_path: Union[Path, str],
 ):
     '''Separate a mixture of multiple sources using lass with RQVAE
@@ -26,37 +30,58 @@ def separate(
     Args:
         source_dir_1: Directory that contains the first source audio files
         source_dir_2: Directory that contains the second source audio files
+        prior_path_1: Path to the first autoregressive prior
+        prior_path_2: Path to the second autoregressive prior
         output_dir: Directory that will contain the separated audio files
         sum_frequencies_path: Path to the distribution of sums
     '''
 
     #1 Set device for separation
-    device = torch.device("cuda", 0) if torch.cuda.is_available() else torch.device("cpu")
-    torch.cuda.set_device(0)
+    if torch.cuda.is_available():
+        device = torch.device("cuda", 0)
+        torch.cuda.set_device(0)
+    else:
+        device = torch.device("cpu")
     print(f"Device is: {device}");
 
     #2 Instantiate rqvae model from EnCodec
     rqvae = EncodecModel.encodec_model_24khz()
+    rqvae.set_target_bandwidth(6.0)
     rqvae = rqvae.to(device)
     print("EnCodec model instantiated")
 
-    #3 Instantiate separator
+    #3 Instantiate prior models
+    priors = [
+        make_prior(rqvae),
+        make_prior(rqvae),
+    ]
+
+    priors[0].load_state_dict(torch.load(prior_path_1))
+    priors[1].load_state_dict(torch.load(prior_path_2))
+    
+    priors = {
+        Path(prior_path_1).stem: priors[0].to(device),
+        Path(prior_path_2).stem: priors[1].to(device),
+    }
+
+    #4 Instantiate separator
     separator = BeamSearchSeparator(
-        encode_fn = lambda x: 2*x,
-        decode_fn = lambda x: 0.5*x,
+        encode_fn = lambda x: torch.cat([frame for frame, _ in rqvae.encode(x)], dim=-1).view(-1).tolist(),
+        decode_fn = lambda x: rqvae.decode([x.view(8, 1024)]),
+        priors={k:JukeboxPrior(p, torch.zeros((), dtype=torch.float32, device=device)) for k,p in priors.items()},
         likelihood = SparseLikelihood(sum_frequencies_path, device, 3.0),
         num_beams = 10,
     )
     
-    #4 Instantiate dataset
-    mixture_dataset = MixtureDataset(source_dir_1, source_dir_2)
+    #5 Instantiate dataset
+    mixture_dataset = MixtureDataset(source_dir_1, source_dir_2, device)
     dataset_loader = DataLoader(
         mixture_dataset,
         batch_size=1,
         num_workers=6,
     )
 
-    #5 Separate (and save)
+    #6 Separate (and save)
     separator.separate(
         dataset_loader = dataset_loader,
         output_dir = output_dir,
@@ -86,10 +111,22 @@ if __name__ == "__main__":
         default=str(ROOT_DIRECTORY / "separated-audio"),
     )
     parser.add_argument(
+        "--prior-path-1",
+        type=str,
+        help="Path to the first autoregressive prior",
+        default=str(ROOT_DIRECTORY / "checkpoints/encodec_prior_bass.pth"),
+    )
+    parser.add_argument(
+        "--prior-path-2",
+        type=str,
+        help="Path to the second autoregressive prior",
+        default=str(ROOT_DIRECTORY / "checkpoints/encodec_prior_drums.pth"),
+    )
+    parser.add_argument(
         "--sum-frequencies-path",
         type=str,
         help="Path to the distrubution of sums",
-        default=str(ROOT_DIRECTORY / "checkpoints/sum_frequencies.npz"),
+        default=str(ROOT_DIRECTORY / "checkpoints/sum_dist_rqvae.npz"),
     )
 
     #2 Separate with given parameters

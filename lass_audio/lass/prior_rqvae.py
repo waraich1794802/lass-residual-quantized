@@ -1,25 +1,54 @@
-import functools
-from typing import Any, Optional, Tuple
-import numpy as np
-import sparse
-from diba.diba import Likelihood, SeparationPrior
+# Utility
+import math
+# EnCodec and Encodec prior
+from encodec.encodec.model import EncodecModel, LMModel
+# Prior for RQ-Transformer
+from jukebox.prior.autoregressive import ConditionalAutoregressive2D
+# Pytorch
 import torch
 
-from jukebox.prior.autoregressive import ConditionalAutoregressive2D
+class EncodecPriorModel(torch.nn.Module):
+    def __init__(self, rqvae: EncodecModel):
+        super().__init__()
+        self.bins = rqvae.quantizer.bins
+        self.n_q = int(1000 * rqvae.bandwidth // (math.ceil(rqvae.sample_rate / rqvae.encoder.hop_length) * 10))
 
+        self.spatial_prior = ConditionalAutoregressive2D(
+            input_shape = [1024],
+            bins = self.bins * self.n_q,
+            width = 1024, #1024 original
+            depth = 48, #48 original
+        )
 
-class JukeboxPrior(SeparationPrior):
-    def __init__(self, transformer: ConditionalAutoregressive2D, x_cond: Optional[torch.Tensor] = None):
+        self.depth_prior = ConditionalAutoregressive2D(
+            input_shape = [self.n_q],
+            bins = self.n_q,
+            width = 8, #1024 original
+            depth = 2, #48 original
+        )
+
+    def forward(self, x):
+        x = x.view(self.n_q, self.bins)
+        x = torch.sum(x, 0).unsqueeze(0)
+            
+        # Compute the loss for the spatial prior
+        loss, _, _ = self.spatial_prior(x)
+
+        # Compute the loss
+
+        return loss
+
+class EncodecPrior(SeparationPrior):
+    def __init__(self, transformer: LMModel):
         self._prior = transformer
-        self._x_cond = x_cond
-        self.iters = 0
 
     @functools.lru_cache(1)
     def get_device(self) -> torch.device:
         return list(self._prior.transformer.parameters())[0].device
 
+    #TODO: change to correct out_features
     def get_tokens_count(self) -> int:
-        return self._prior.x_out.out_features
+        return self._prior.linears.out_features
 
     def get_sos(self) -> Any:
         return 0 #self._prior.start_token # DUMMY METHOD
@@ -35,35 +64,25 @@ class JukeboxPrior(SeparationPrior):
         #print(f"n_sample is: {n_samples}");
         #print(f"seq_length is: {seq_length}");
 
-        # delete cache if token_ids is 1 (sos token)
+        # assert token lenght is > 0
         assert len(token_ids) > 0
-        if len(token_ids) == 1:
-            self._prior.transformer.del_cache()
 
         x = token_ids[:, -1:]
         #print(f"x shape is: {x.shape}");
 
-        # add x-conditioning
-        if self._x_cond is not None:
-            x_cond = self._x_cond
-        else:
-            x_cond = torch.zeros((n_samples, 1, -1), device=x.device, dtype=torch.float)
-        
-        #print(f"x_cond shape is: {x_cond.shape}");
-
         # get embeddings
-        x, cond_0 = self._prior.get_emb(sample_t, n_samples, x, x_cond=x_cond, y_cond=None)
+        #x, cond_0 = self._prior.get_emb(sample_t, n_samples, x, x_cond=x_cond, y_cond=None)
         #print(f"embedding shape is: {x.shape}");
         #print(f"cond_0 shape is: {cond_0.shape}");
 
-        self._prior.transformer.check_cache(n_samples, sample_t, fp16=True)
-        x = self._prior.transformer(x, sample=True, fp16=True) # TODO: try sample = False
+        #self._prior.transformer.check_cache(n_samples, sample_t, fp16=True)
+        #x = self._prior.transformer(x, sample=True, fp16=True) # TODO: try sample = False
         #print(f"transformer shape is: {x.shape}");
-        x = self._prior.x_out(x)[:,-1,:]
+        #x = self._prior.x_out(x)[:,-1,:]
+
+        #apply transformer
+        x, _, _ = _prior(x)
         #print(f"output shape is: {x.shape}");
-        self.iters += 1
-        #if self.iters >= 3:
-            #exit()
         return x.to(torch.float32), None
 
     def reorder_cache(self, cache: Any, beam_idx: torch.LongTensor) -> Any:
@@ -93,6 +112,9 @@ class SparseLikelihood(Likelihood):
 
     def _normalize_matrix(self, sum_dist_path: str):
         sum_dist = sparse.load_npz(str(sum_dist_path))
+        print("sum_dist.shape is: {0}".format(sum_dist.shape))
+        #sum_dist = sum_dist[:1024,:1024,:1024]
+        #TODO: CHANGE ABOVE TO BE CORRECT
         integrals = sum_dist.sum(axis=-1, keepdims=True)
         I, J, _ = integrals.coords
         integrals = sparse.COO(

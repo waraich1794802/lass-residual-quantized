@@ -119,6 +119,8 @@ class ConditionalAutoregressive2D(nn.Module):
         with t.no_grad():
             x = self.preprocess(x)
 
+        #print("#preprocess allocated is: {0}".format(t.cuda.memory_allocated(0)))
+
         N, D = x.shape
         assert isinstance(x, t.cuda.LongTensor)
         assert (0 <= x).all() and (x < self.bins).all()
@@ -143,8 +145,11 @@ class ConditionalAutoregressive2D(nn.Module):
             x[:,0] = y_cond.view(N, self.width)
         else:
             x[:,0] = self.start_token
-
+            
         x = self.x_emb_dropout(x) + self.pos_emb_dropout(self.pos_emb()) + x_cond # Pos emb and dropout
+
+        #print("#embedding allocated is: {0}".format(t.cuda.memory_allocated(0)))
+        #print("#size of x allocated is: {0}".format(x.element_size() * x.nelement()))
 
         x = self.transformer(x, encoder_kv=encoder_kv, fp16=fp16) # Transformer
         if self.add_cond_after_transformer: # Piped doesnt add x_cond

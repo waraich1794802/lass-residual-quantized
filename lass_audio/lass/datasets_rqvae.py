@@ -70,9 +70,10 @@ class TrainDataset(FilesAudioDataset):
         return { 'audio': x }'''
 
 class MixtureDataset(Dataset):
-    def __init__(self, directory_1: str, directory_2: str):
+    def __init__(self, directory_1: str, directory_2: str, device: str):
         super().__init__()
 
+        self.device = device
         self.directory_1 = Path(directory_1)
         self.directory_2 = Path(directory_2)
         
@@ -95,14 +96,15 @@ class MixtureDataset(Dataset):
         path_1 = self.directory_1 / self.files_1[idx]
         path_2 = self.directory_2 / self.files_2[idx]
 
-        # TODO: add preprocessing to make the sample rate correct
         source_1, _ = torchaudio.load(str(path_1))
-        source_1 = source_1[None, :, :22000 * 10]
+        #print("source_1.shape is: {0}".format(source_1.shape))
+        source_1 = source_1[:,:327679]
 
         source_2, _ = torchaudio.load(str(path_2))
-        source_2 = source_2[None, :, :22000 * 10]
+        source_2 = source_2[:,:327679]
 
         # Compute mixture from sources
         mixture = 0.5 * source_1 + 0.5 * source_2
+        #print("mixture.shape is: {0}".format(mixture.shape))
 
-        return { 'mixture': mixture }
+        return { 'mixture': mixture.to(self.device) }
