@@ -4,7 +4,7 @@ This is the repo for the *Latent Autoregressive Source Separator*, as described 
 ## Installation
 Before running the original code it was necessary to install an MPI implementation. Refer to the old repo for detailed instruction.
 
-This version is design to run on single device, be it a cpu or a cuda compatible gpu.
+This version is instead designed to run on single device, be it a cpu or a cuda compatible gpu.
 
 Installing the necessary dependencies can be done through conda, by executing the following commands:
 ```bash
@@ -12,7 +12,7 @@ cd lass_audio
 conda env create -f environment.yml
 conda activate lass_audio
 ``` 
-Once the conda environment is installed it is possible to start the separation procedure.
+Once the conda environment is installed it is possible to start the separation procedure or the training. The command line will inform you of any missing arguments.
 
 ## Download Pre-trained models and data
 You can download the necessary checkpoints from [here](https://drive.google.com/drive/folders/1Hc3XtJBsXVu8zH-8Aj2I_z0grZKWeQUk?usp=sharing).
