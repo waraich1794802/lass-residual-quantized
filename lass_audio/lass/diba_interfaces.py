@@ -31,9 +31,9 @@ class JukeboxPrior(SeparationPrior):
         # get dimensions
         n_samples, seq_length = token_ids.shape
         sample_t = seq_length - 1
-        #print(f"token is: {token_ids}");
-        #print(f"n_sample is: {n_samples}");
-        #print(f"seq_length is: {seq_length}");
+        print(f"token is: {token_ids}");
+        print(f"n_sample is: {n_samples}");
+        print(f"seq_length is: {seq_length}");
 
         # delete cache if token_ids is 1 (sos token)
         assert len(token_ids) > 0
@@ -41,7 +41,7 @@ class JukeboxPrior(SeparationPrior):
             self._prior.transformer.del_cache()
 
         x = token_ids[:, -1:]
-        #print(f"x shape is: {x.shape}");
+        print(f"x shape is: {x.shape}");
 
         # add x-conditioning
         if self._x_cond is not None:
@@ -53,17 +53,17 @@ class JukeboxPrior(SeparationPrior):
 
         # get embeddings
         x, cond_0 = self._prior.get_emb(sample_t, n_samples, x, x_cond=x_cond, y_cond=None)
-        #print(f"embedding shape is: {x.shape}");
+        print(f"embedding shape is: {x.shape}");
         #print(f"cond_0 shape is: {cond_0.shape}");
 
         self._prior.transformer.check_cache(n_samples, sample_t, fp16=True)
         x = self._prior.transformer(x, sample=True, fp16=True) # TODO: try sample = False
-        #print(f"transformer shape is: {x.shape}");
+        print(f"transformer shape is: {x.shape}");
         x = self._prior.x_out(x)[:,-1,:]
-        #print(f"output shape is: {x.shape}");
+        print(f"output shape is: {x.shape}");
         self.iters += 1
-        #if self.iters >= 3:
-            #exit()
+        if self.iters >= 3:
+            exit()
         return x.to(torch.float32), None
 
     def reorder_cache(self, cache: Any, beam_idx: torch.LongTensor) -> Any:

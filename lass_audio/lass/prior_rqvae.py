@@ -59,7 +59,7 @@ class EncodecPrior(SeparationPrior):
         return self._prior.linears[0].out_features * 8
 
     def get_sos(self) -> Any:
-        return 0 #torch.zeros(10, 8).to(self.get_device()) #return start token as defined in LMModel
+        return torch.zeros(10, 8).to(self.get_device()) #return start token as defined in LMModel
 
     def get_logits(
             self, token_ids: torch.LongTensor, cache: Optional[Any] = None,
@@ -69,32 +69,33 @@ class EncodecPrior(SeparationPrior):
         
         # assert token lenght is > 0
         assert len(token_ids) > 0
-        
-        # if sos token then we create proper start token
-        if len(token_ids[0]) == 1:
-            token_ids = torch.zeros(1, 8, 1).long().to(self.get_device())
-        # else add 1 to differentiate index 0 from start token
-        else:
-            token_ids = token_ids + 1
-            
+
         # get dimensions
         #print("token_ids shape is: {0}".format(token_ids.shape))
         n_samples, n_q, seq_length = token_ids.shape
         sample_t = seq_length - 1
+        if cache is not None:
+            state, offset = cache
+        else:
+            state, offset = (None, 0)
+
         #print(f"token is: {token_ids}");
 
+        # add 1 to differentiate index 0 from start token
+        token_ids = token_ids + 1
+
+        # take last element
         x = token_ids[:,:, -1:]
         #print(f"x shape is: {x.shape}");
 
-        # TODO: change order to match the likelihood matrix
         #apply transformer
-        x, _, _ = self._prior(x)
+        x, state, offset = self._prior(x, state, offset)
         #print(f"x shape after prior is: {x.shape}");
         x = x[:,:,:,-1]
         x = x.view(n_samples, -1)
         #print(f"output shape is: {x.shape}");
 
-        return x.to(torch.float32), None
+        return x.to(torch.float32), (state, offset)
 
     def reorder_cache(self, cache: Any, beam_idx: torch.LongTensor) -> Any:
         #TODO: understand what this is for
