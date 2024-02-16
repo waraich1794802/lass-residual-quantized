@@ -28,24 +28,25 @@ class EncodecPriorModel(torch.nn.Module):
         )
 
         self.depth_prior = ConditionalAutoregressive2D(
-            input_shape = [self.n_q],
-            bins = self.n_q,
+            input_shape = [1024 * self.bins],
+            bins = self.bins,
             width = 8, #1024 original
             depth = 2, #48 original
         )
 
     def forward(self, x):
         x = x.view(self.n_q, self.bins)
-        x_sp = torch.sum(x, 0).unsqueeze(0)
-        x_dp = x.permute(0, 1)
+        x_i = torch.sum(x, 0).unsqueeze(0)
             
         # Compute the tokens for the spatial prior
-        loss, x_sp = self.spatial_prior(x_sp)
+        loss, x_sp = self.spatial_prior(x_i)
+        # ^ This fails because of memory
 
         # Compute the tokens for the depth prior
-        loss, x_dp = self.depth_prior(x_dp)
+        loss, x_dp = self.depth_prior(x_sp.view(-1))
 
-        # 
+        # Loss would be cross entropy between x_dp and the original x
+        #loss = F.cross_entropy(x_dp, x_i)
 
         return loss
 

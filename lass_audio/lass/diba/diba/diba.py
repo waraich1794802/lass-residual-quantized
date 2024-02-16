@@ -262,6 +262,7 @@ def _ancestral_sample(
         #print("ll_coords be like: {0}".format(likelihood_list[0][0].shape))
 
         # compute log posterior
+        list_x_0, list_x_1 = [], []
         for ll_coords, ll_data in likelihood_list:
             if ll_coords.numel() > 0:
                 # Note: posterior_data has shape (n_samples, nonzeros)
@@ -271,6 +272,8 @@ def _ancestral_sample(
                 x_0, x_1 = ll_coords[:, coords_idx]
             else:
                 raise RuntimeError(f"Code {mixture[sample_t]} is not available in likelihood!");
+            list_x_0.append(x_0)
+            list_x_1.append(x_1)
         #/AW
         
         num_current_beams = len(beams)
