@@ -45,6 +45,8 @@ class EncodecPriorModel(torch.nn.Module):
         # Compute the tokens for the depth prior
         loss, x_dp = self.depth_prior(x_dp)
 
+        # 
+
         return loss
 
 class EncodecPrior(SeparationPrior):
@@ -89,10 +91,9 @@ class EncodecPrior(SeparationPrior):
         #print(f"x shape is: {x.shape}");
 
         #apply transformer
-        x, state, offset = self._prior(x, state, offset)
+        x, state, offset = self._prior(x) #, state, offset)
         #print(f"x shape after prior is: {x.shape}");
         x = x[:,:,:,-1]
-        #TODO: this might be an issue
         x = x.view(n_samples, -1)
         #print(f"output shape is: {x.shape}");
 
@@ -117,7 +118,7 @@ class SparseLikelihood(Likelihood):
 
     @functools.lru_cache(512)
     def get_log_likelihood(self, token_idx: int) -> Tuple[torch.LongTensor, torch.Tensor]:
-        #print("_freqs shape is: {0}".format(self._freqs.shape))
+        
         sparse_nll = self._freqs[:, :, token_idx].tocoo()
         nll_coords = torch.tensor(sparse_nll.coords, device=self.get_device(), dtype=torch.long)
         nll_data = torch.tensor(sparse_nll.data, device=self.get_device(), dtype=torch.float)

@@ -196,9 +196,9 @@ def _compute_log_posterior(
     log_p1: torch.Tensor,
 ):
     coords_p0, coords_p1 = nll_coords
-    print("nll_data.shape is: {0}".format(nll_data.shape))
-    print("log_p0.shape is: {0}".format(log_p0.shape))
-    print("log_p1.shape is: {0}".format(log_p1.shape))
+    #print("nll_data.shape is: {0}".format(nll_data.shape))
+    #print("log_p0.shape is: {0}".format(log_p0.shape))
+    #print("log_p1.shape is: {0}".format(log_p1.shape))
     return nll_data + log_p0[:, coords_p0] + log_p1[:, coords_p1]
 
 
@@ -228,7 +228,6 @@ def _ancestral_sample(
     # loop over all samples tokens
     for sample_t in tqdm(range(sample_tokens)):
 
-        #TODO: maybe use past?
         # compute log priors
         log_p_0, past_0 = prior_0._get_logits(xs_0[:num_current_beams, :, : sample_t + 1], past_0)
         log_p_1, past_1 = prior_1._get_logits(xs_1[:num_current_beams, :, : sample_t + 1], past_1)
@@ -258,29 +257,22 @@ def _ancestral_sample(
         #print("mixture slice is: {0}".format(mixture[sample_t * 8: sample_t * 8 + 8]))
         #ll_coords, ll_data = likelihood._get_log_likelihood(mixture[sample_t])
         #AW:
-        #TODO: check that tokens are different
-        likelihood_list =[likelihood._get_log_likelihood(mixture[token_idx * 1024 + sample_t] * 8 + token_idx) for token_idx in range(8)]
+        likelihood_list =[likelihood._get_log_likelihood(mixture[token_idx * 1024 + sample_t]) for token_idx in range(8)]
         #print("ll_coords be like: {0}".format(len(likelihood_list)))
         #print("ll_coords be like: {0}".format(likelihood_list[0][0].shape))
 
         # compute log posterior
-        list_log_post_sum, list_x_0, list_x_1 = [], [], []
         for ll_coords, ll_data in likelihood_list:
             if ll_coords.numel() > 0:
                 # Note: posterior_data has shape (n_samples, nonzeros)
-                posterior_data = _compute_log_posterior(ll_data, ll_coords, log_p_0, log_p_1)
-                log_post_sum_l, (beams, coords_idx) = get_topk(log_post_sum + posterior_data, n_samples)
-                log_post_sum_l = log_post_sum.unsqueeze(-1)
+                posterior_data = _compute_log_posterior(ll_data, ll_coords, log_p_0.view(num_current_beams, -1), log_p_1.view(num_current_beams, -1))
+                log_post_sum, (beams, coords_idx) = get_topk(log_post_sum + posterior_data, n_samples)
+                log_post_sum = log_post_sum.unsqueeze(-1)
                 x_0, x_1 = ll_coords[:, coords_idx]
             else:
                 raise RuntimeError(f"Code {mixture[sample_t]} is not available in likelihood!");
-            list_log_post_sum.append(log_post_sum_l)
-            list_x_0.append(x_0)
-            list_x_1.append(x_1)
-            print("beam is: {0}".format(beam))
         #/AW
         
-        #TODO manage beams per thing
         num_current_beams = len(beams)
         
         #print("after log posterior: {0}".format(list_x_0))
@@ -295,7 +287,6 @@ def _ancestral_sample(
         #print("x_0 is: {0}".format(x_0))
 
         # make history consistent with current beams
-        # TODO: this doesn't look right
         #xs_0[:num_current_beams, : sample_t + 1] = xs_0[beams, : sample_t + 1]
         xs_0[:num_current_beams, :, : sample_t + 1] = xs_0[beams, :, : sample_t + 1]
         #xs_1[:num_current_beams, : sample_t + 1] = xs_1[beams, : sample_t + 1]
@@ -307,9 +298,6 @@ def _ancestral_sample(
         #xs_1[:, sample_t + 1] = x_1
         xs_1[:, :, sample_t + 1] = x_1
 
-        #TODO: manage beams per thing
-        for log in list_log_post_sum:
-            print("log is: {0}".format(log))
         log_post_sum = log_post_sum[beams]
 
         # update the priors cache w.r.t. the current beams
