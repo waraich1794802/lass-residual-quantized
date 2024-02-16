@@ -2,7 +2,7 @@
 Deep Learning Project [2022/23]
 
 This is the repo for the deep learning project involving adapting lass to the residual setting.
-The code of interest is in the folder * [`./lass_audio`](https://github.com/waraich1794802/lass-residual-quantized/tree/main/lass_audio) 
+The code of interest is in the folder [`./lass_audio`](https://github.com/waraich1794802/lass-residual-quantized/tree/main/lass_audio) 
 The added files are as follows:
 ```lua
 lass_audio
@@ -13,8 +13,9 @@ lass_audio
 |   |-- separators_rqvae.py
 |   |-- train_priors_rqvae.py
 |   |-- train_sums_rqvae.py
+|-- encodec
 ```
-Diba interfaces have also been modifies accordingly.
+Diba interfaces have also been modified accordingly.
 Quick links to the main scripts:
 [`separate_rqvae.py`](https://github.com/waraich1794802/lass-residual-quantized/blob/main/lass_audio/lass/separate_rqvae.py) 
 [`train_priors_rqvae.py`](https://github.com/waraich1794802/lass-residual-quantized/blob/main/lass_audio/lass/train_priors_rqvae.py) 
