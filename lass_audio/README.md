@@ -1,5 +1,5 @@
 ﻿# Source Separation in Residual Quantized Latent Domains
-This is the repo for the *Latent Autoregressive Source Separator*, as described in its [paper](https://arxiv.org/abs/2301.08562), applied to the residual setting. It is an based upon the [original repo](https://github.com/gladia-research-group/latent-autoregressive-source-separation/tree/main).
+This is the repo for the *Latent Autoregressive Source Separator*, as described in its [paper](https://arxiv.org/abs/2301.08562), applied to the residual setting. It is  based upon the [original repo](https://github.com/gladia-research-group/latent-autoregressive-source-separation/tree/main).
 
 ## Installation
 Before running the original code it was necessary to install an MPI implementation. Refer to the old repo for detailed instruction.
@@ -12,6 +12,7 @@ cd lass_audio
 conda env create -f environment.yml
 conda activate lass_audio
 ``` 
+This includes new packages necessary for EnCodec.
 Once the conda environment is installed it is possible to start the separation procedure or the training. The command line will inform you of any missing arguments.
 
 ## Download Pre-trained models and data
