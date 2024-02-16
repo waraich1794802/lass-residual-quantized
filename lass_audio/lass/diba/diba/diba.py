@@ -220,7 +220,7 @@ def _ancestral_sample(
     log_post_sum = torch.zeros(1, 1, dtype=torch.long, device=device)
     #xs_0, xs_1 = torch.full((2, n_samples, sample_tokens + 1), fill_value=-1, dtype=torch.long, device=device)
     xs_0, xs_1 = torch.full((2, n_samples, 8, sample_tokens + 1), fill_value=-1, dtype=torch.long, device=device)
-    print("xs_0 is: {0}".format(xs_0.shape))
+    #print("xs_0 is: {0}".format(xs_0.shape))
     xs_0[:, :, 0], xs_1[:, :, 0] = [p.get_sos() for p in priors]
     past_0, past_1 = (None, None)
     num_current_beams = 1

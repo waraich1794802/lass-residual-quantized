@@ -60,11 +60,7 @@ class BeamSearchSeparator(Separator):
                 continue
             torchaudio.save(str(output_dir / f"mix_{batch_idx}.wav"), batch[0].cpu(), sample_rate=24000)
             #3.a Convert signals to codes
-            #print("mixture.shape is: {0}".format(batch['mixture'].shape))
             mixture_codes = self.encode_fn(batch)
-            #print("mixture_codes with scale (?): {0}".format(mixture_codes))
-            #print("len(mixture_codes) is: {0}".format(len(mixture_codes)))
-            #print("mixture.type is: {0}".format(mixture_codes.type()))
 
             #3.b Separate mixture
             diba_separated_1, diba_separated_2 = diba.fast_beamsearch_separation(
@@ -73,9 +69,6 @@ class BeamSearchSeparator(Separator):
                 mixture = mixture_codes,
                 num_beams = self.num_beams,
             )
-
-            print("diba_separated_1 is: {0}".format(diba_separated_1.shape))
-            print("diba_separated_2 is: {0}".format(diba_separated_2.shape))
 
             #3.c Decode the results
             separated_source_1 = self.decode_fn(diba_separated_1)
